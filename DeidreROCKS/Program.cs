@@ -9,9 +9,11 @@ namespace DeidreROCKS
 {
     class Program
     {
-        static IStateAggregate stateAggregate = null;
-        static ICustomerAggregate customerAggregate = null;
-        static IPurchaseAggregate purchaseAggregate = null;
+        static IStateRepository stateRepository = null;
+        static ICustomerRepository customerRepository = null;
+        static IPurchaseRepository purchaseRepository = null;
+        static ICustomerContext customerContext = null;
+
         static string customerFileName = null;
         static string purchaseFileName = null;
         static void Main(string[] args)
@@ -19,9 +21,10 @@ namespace DeidreROCKS
             customerFileName = getFilePath() + "Data\\CustomerInvoicingData.csv";
             purchaseFileName = getFilePath() + "Data\\SmallGroup-SalesData.csv";
 
-            stateAggregate = new StateAggregate(StateAggregate.GetStates());
-            purchaseAggregate = new PurchaseAggregate(PurchaseAggregate.GetPurchases(purchaseFileName, stateAggregate));
-            customerAggregate = new CustomerAggregate(CustomerAggregate.GetCustomers(customerFileName, purchaseAggregate, stateAggregate));
+            stateRepository = new StateRepository(StateRepository.GetStates());
+            purchaseRepository = new PurchaseRepository(PurchaseRepository.GetPurchases(purchaseFileName, stateRepository), purchaseFileName);
+            customerRepository = new CustomerRepository(CustomerRepository.GetCustomers(customerFileName, purchaseRepository, stateRepository), customerFileName);
+            customerContext = new CustomerContext(customerRepository, purchaseRepository);
 
             displayMenu();
         }
@@ -45,50 +48,50 @@ namespace DeidreROCKS
 
             //Read Users Answer (should be 1 thru 8)
             string userAnswer = Console.ReadLine();
-            if (userAnswer == "1") { displayPurchaseSummaryByState(stateAggregate, customerAggregate); }
-            else if (userAnswer == "2") { displayTaxSummary(stateAggregate, customerAggregate); }
-            else if (userAnswer == "3") { displayAllPurchases(customerAggregate); }
-            else if (userAnswer == "4") { displayCustomers(customerAggregate); }
-            else if (userAnswer == "5") { displayPurchaseSummaryByCustomer(customerAggregate); }
-            else if (userAnswer == "6") { displayAddNewPurchase(customerAggregate, purchaseAggregate); }
-            else if (userAnswer == "7") { displayCreateInvoice(customerAggregate); }
+            if (userAnswer == "1") { displayPurchaseSummaryByState(stateRepository, customerContext); }
+            else if (userAnswer == "2") { displayTaxSummary(stateRepository, customerContext); }
+            else if (userAnswer == "3") { displayAllPurchases(customerRepository); }
+            else if (userAnswer == "4") { displayCustomers(customerRepository); }
+            else if (userAnswer == "5") { displayPurchaseSummaryByCustomer(customerRepository); }
+            else if (userAnswer == "6") { displayAddNewPurchase(customerRepository, purchaseRepository, customerContext); }
+            else if (userAnswer == "7") { displayCreateInvoice(customerRepository); }
             else if (userAnswer == "8") { Environment.Exit(0); }
             else displayMenu();
         }
-        private static void displayPurchaseSummaryByState(IStateAggregate statesAggregate, ICustomerAggregate customerAggregate)
+        private static void displayPurchaseSummaryByState(IStateRepository statesRepository, ICustomerContext customerContext)
         {
             Console.Clear();
             Console.WriteLine("\n.................... PURCHASE TOTAL SUMMARY (By State) ....................\n");
 
-            foreach (var state in statesAggregate.States)
+            foreach (var state in statesRepository.States)
             {
-                var sumForState = customerAggregate.SumTotalPurchaseByState(state.StateCode);
+                var sumForState = customerContext.SumTotalPurchaseByState(state.StateCode);
                 Console.WriteLine($"Total {state.StateName} Purchases: {sumForState.ToString("C")}");
             }
 
             returnToMainMenu();
             return;
         }
-        private static void displayTaxSummary(IStateAggregate statesAggregate, ICustomerAggregate customerAggregate)
+        private static void displayTaxSummary(IStateRepository statesRepository, ICustomerContext customerContext)
         {
             Console.Clear();
             Console.WriteLine("\n................. TAX SUMMARY REPORT BY STATE ..................\n");
 
-            foreach (var state in statesAggregate.States)
+            foreach (var state in statesRepository.States)
             {
-                var sumForState = customerAggregate.SumTotalTaxByState(state.StateCode);
+                var sumForState = customerContext.SumTotalTaxByState(state.StateCode);
                 Console.WriteLine($"Total {state.StateName} State Tax Owed: {sumForState.ToString("C")}");
             }
 
             returnToMainMenu();
             return;
         }
-        private static void displayAllPurchases(ICustomerAggregate customerAggregate)
+        private static void displayAllPurchases(ICustomerRepository customerRepository)
         {
             Console.Clear();
             Console.WriteLine("\n................ PURCHASE SUMMARY REPORT (All Purchases) ...................\n");
 
-            foreach (var customer in customerAggregate.Customers)
+            foreach (var customer in customerRepository.Customers)
             {
                 if(customer.Purchases != null && customer.Purchases.Any())
                 {
@@ -108,12 +111,12 @@ namespace DeidreROCKS
             returnToMainMenu();
             return;
         }
-        private static void displayCustomers(ICustomerAggregate customerAggregate)
+        private static void displayCustomers(ICustomerRepository customerRepository)
         {
             Console.Clear();
             Console.WriteLine("\n.................... CUSTOMER NAMES ON RECORD .......................\n");
 
-            foreach (var customer in customerAggregate.Customers)
+            foreach (var customer in customerRepository.Customers)
             {
                 Console.WriteLine($"Customer Name: {(customer.Name ?? string.Empty).Trim()}\tCustomer ID: {customer.Id}");
             }
@@ -121,12 +124,12 @@ namespace DeidreROCKS
             returnToMainMenu();
             return;
         }
-        private static void displayPurchaseSummaryByCustomer(ICustomerAggregate customerAggregate)
+        private static void displayPurchaseSummaryByCustomer(ICustomerRepository customerRepository)
         {
             Console.Clear();
             Console.WriteLine("\n................... PURCHASE TOTAL SUMMARY (By Customer) ....................\n");
 
-            foreach (var customer in customerAggregate.Customers)
+            foreach (var customer in customerRepository.Customers)
             {
                 Console.WriteLine($"Customer ID: {customer.Id}");
                 Console.WriteLine($"Customer Name: {customer.Name}");
@@ -137,15 +140,15 @@ namespace DeidreROCKS
             returnToMainMenu();
             return;
         }
-        private static void displayAddNewPurchase(ICustomerAggregate customerAggregate, IPurchaseAggregate purchaseAggregate)
+        private static void displayAddNewPurchase(ICustomerRepository customerRepository, IPurchaseRepository purchaseRepository, ICustomerContext customerContext)
         {
             Console.Clear();
             Console.WriteLine("\n................. ADD A NEW PURCHASE RECORD ....................\n");
 
             Console.WriteLine("\n\nCurrent Customer's on Record for reference as needed:\n");
-            displayCustomerGraph(customerAggregate);
+            displayCustomerGraph(customerRepository);
 
-            var customer = collectCustomerFromUser(customerAggregate);
+            var customer = collectCustomerFromUser(customerRepository);
             if(customer == null)
             {
                 displayMenu();
@@ -159,7 +162,7 @@ namespace DeidreROCKS
                 return;
             }
 
-            State purchaseState = collectPurchaseStateFromUser(stateAggregate);
+            State purchaseState = collectPurchaseStateFromUser(stateRepository);
             if(purchaseState == null)
             {
                 displayMenu();
@@ -168,8 +171,8 @@ namespace DeidreROCKS
 
             try
             {
-                var purchase = purchaseAggregate.Create(customer.Id, subtotal.Value, purchaseState);
-                purchaseAggregate.Save(purchase, customerAggregate, purchaseFileName);
+                var purchase = purchaseRepository.Create(customer.Id, subtotal.Value, purchaseState);
+                customerContext.MakePurchase(purchase);
                 Console.WriteLine("Purchase Successfully Recorded.\n");
                 Console.WriteLine("\n\nPress Enter to return to the menu");
                 Console.ReadLine();
@@ -184,16 +187,16 @@ namespace DeidreROCKS
             }
             return;
         }
-        private static void displayCreateInvoice(ICustomerAggregate customerAggregate)
+        private static void displayCreateInvoice(ICustomerRepository customerRepository)
         {
             Console.Clear();
             Console.WriteLine("\n>>>>>>>>>>>>>>>>>>>>>>>>  INVOICING  <<<<<<<<<<<<<<<<<<<<<<<<<<<<");
             Console.WriteLine("\n\nAvailable Customers to Invoice:");
 
-            displayCustomerGraph(customerAggregate);
+            displayCustomerGraph(customerRepository);
 
             Console.WriteLine("\n\nPlease Enter The Customer ID of the Customer Invoice to Print : ");
-            var customer = collectCustomerFromUser(customerAggregate);
+            var customer = collectCustomerFromUser(customerRepository);
             if (customer == null)
             {
                 displayMenu();
@@ -222,7 +225,7 @@ namespace DeidreROCKS
             returnToMainMenu();
             return;
         }
-        private static Customer collectCustomerFromUser(ICustomerAggregate customerAggregate)
+        private static Customer collectCustomerFromUser(ICustomerRepository customerRepository)
         {
             bool collecting = true;
             int customerId = 0;
@@ -244,7 +247,7 @@ namespace DeidreROCKS
 
                 if (int.TryParse(userInput, out customerId))
                 {
-                    customer = customerAggregate.GetCustomer(customerId);
+                    customer = customerRepository.GetCustomer(customerId);
                     if (customer != null)
                         collecting = false;
                 }
@@ -287,7 +290,7 @@ namespace DeidreROCKS
             } while (collecting);
             return subtotal;
         }
-        private static State collectPurchaseStateFromUser(IStateAggregate stateAggregate)
+        private static State collectPurchaseStateFromUser(IStateRepository stateAggregate)
         {
             bool collecting = true;
             State state = null;
@@ -321,9 +324,9 @@ namespace DeidreROCKS
         {
             return Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) + "\\";
         }
-        private static void displayCustomerGraph(ICustomerAggregate customerAggregate)
+        private static void displayCustomerGraph(ICustomerRepository customerRepository)
         {
-            foreach (var displayCustomer in customerAggregate.Customers)
+            foreach (var displayCustomer in customerRepository.Customers)
             {
                 Console.WriteLine($"Name: {(displayCustomer.Name ?? string.Empty).Trim()}" +
                     $"\tCustomer ID: {displayCustomer.Id}" +
